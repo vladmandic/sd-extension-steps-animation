@@ -3,7 +3,7 @@
 Extension to create animation sequence from denoised intermediate steps  
 Registers a script in **txt2img** and **img2img** tabs
 
-Creating animation has minimum impact on overal performance as it does not require separate runs  
+Creating animation has minimum impact on overall performance as it does not require separate runs  
 except adding overhead of saving each intermediate step as image plus few seconds to actually create movie file  
 
 Supports **color** and **motion** interpolation to achieve animation of desired duration from any number of interim steps  
@@ -11,11 +11,9 @@ Resulting movie fiels are typically very small (*~1MB being average*) due to opt
 
 ![screenshot](steps-animation.jpg)
 
-### Examples
+### Example
 
 https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-bc5d-9c24a9146d38.mp4
-
-https://user-images.githubusercontent.com/57876960/212487892-b8826f8e-9fc0-4e08-8f4b-16507b1d2cde.mp4
 
 ### Notes
 
