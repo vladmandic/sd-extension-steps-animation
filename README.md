@@ -4,9 +4,10 @@ Extension to create animation sequence from denoised intermediate steps
 Registers a script in **txt2img** and **img2img** tabs
 
 Creating animation has minimum impact on overal performance as it does not require separate runs  
-except adding overhead of saving each intermediate step as image  
+except adding overhead of saving each intermediate step as image plus few seconds to actually create movie file  
 
 Supports **color** and **motion** interpolation to achieve animation of desired duration from any number of interim steps  
+Resulting movie fiels are typically very small (*~1MB being average*) due to optimized codec settings  
 
 ![screenshot](steps-animation.jpg)
 
@@ -74,18 +75,7 @@ Default parameters used for each codec:
 - **vpx-vp9**: `-vcodec libvpx-vp9 -crf 34 -b:v 0 -deadline realtime -cpu-used 4`,
 - **aom-av1**: `-vcodec libaom-av1 -crf 28 -b:v 0 -usage realtime -cpu-used 8 -pix_fmt yuv444p`
 
-
-<hr>
-
-## PR Notes
-
-**Save Intermediate Steps** custom script
-
-Creates animation sequence from denoised intermediate steps with interpolation between frames
-
-![screenshot](https://raw.githubusercontent.com/vladmandic/generative-art/main/automatic/scripts/save_steps_animation.png)
-
-- Docs & Notes: <https://github.com/vladmandic/generative-art/blob/main/automatic/scripts/README.md>
+## Credits
 
 - Original idea from #5464 by @kevinschaul  
 - Previous requests:  
