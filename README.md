@@ -9,7 +9,7 @@ Creating animation adds overhead of saving each intermedia step, but otherwise i
 
 ### Example
 
-![example](example-mci-eulera.mp4)
+![example](https://user-images.githubusercontent.com/57876960/212487892-b8826f8e-9fc0-4e08-8f4b-16507b1d2cde.mp4)
 
 ### Notes
 
