@@ -3,7 +3,10 @@
 Extension to create animation sequence from denoised intermediate steps  
 Registers a script in **txt2img** and **img2img** tabs
 
-Creating animation adds overhead of saving each intermedia step, but otherwise it has minimum impact on overal performance as it does not require separate runs  
+Creating animation has minimum impact on overal performance as it does not require separate runs  
+except adding overhead of saving each intermediate step as image  
+
+Supports **color** and **motion** interpolation to achieve animation of desired duration from any number of interim steps  
 
 ![screenshot](steps-animation.jpg)
 
