@@ -77,6 +77,5 @@ Default parameters used for each codec:
 
 ## Credits
 
-- Original idea from #5464 by @kevinschaul  
-- Previous requests:  
-  #1026, #2137, #2094, #2739, #4709, #2137, #41  
+- Original idea from [#5464](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/5464) by @kevinschaul  
+- Previous requests: [#1026](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/1026), [#2137](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/2137), [#2094](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/2094), [#2739](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/2739), [#4709](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/4709), [#2137](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/2137), [#41](https://github.com/AUTOMATIC1111/stable-diffusion-webui/issues/41)  
