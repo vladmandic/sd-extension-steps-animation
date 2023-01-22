@@ -4,15 +4,19 @@ import shutil
 import string
 import pathlib
 
+
 import gradio as gr
 from modules import scripts
 from modules.images import save_image
 from modules.sd_samplers import KDiffusionSampler, sample_to_image
 
+
 # configurable section
 video_rate = 30
 author = 'https://github.com/vladmandic'
-cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i \"{inpath}/%5d.jpg\" -r {videorate} {preset} {minterpolate} {flags} -metadata title='{description}' -metadata description='{info}' -metadata author='stable-diffusion' -metadata album_artist='{author}' '{outfile}'" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i \"{inpath}/%5d.jpg\" -r {videorate} {preset} {minterpolate} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+
+
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23',
     'x265': '-vcodec libx265 -preset faster -crf 28',
@@ -20,9 +24,11 @@ presets = {
     'aom-av1': '-vcodec libaom-av1 -crf 28 -b:v 0 -usage realtime -cpu-used 8 -pix_fmt yuv444p',
 }
 
+
 # internal state variables
 current_step = 0
 orig_callback_state = KDiffusionSampler.callback_state
+
 
 def safestring(text: str):
     lines = []
@@ -30,6 +36,7 @@ def safestring(text: str):
         lines.append(line.translate(str.maketrans('', '', string.punctuation)).strip())
     res = ', '.join(lines)
     return res[:1000]
+
 
 class Script(scripts.Script):
     # script title to show in ui
