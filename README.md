@@ -52,6 +52,9 @@ https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-
 
 Dependent on your system and settings used to produce images  
 
+Type of interpolation used has direct impact on performance:
+**None** and **Blend** results in almost instant animation creation while **MCI** takes twice as long as its a two-pass interpolation method
+
 *Example*: Using *Euler A* sampler with 100 steps to produce a 10 sec blend animation of a single trained embedding with 30 frames-per-second takes just ~1 min on nVidia RTX3060  
 ### Interpolation
 

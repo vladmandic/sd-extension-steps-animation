@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import string
 
 import gradio as gr
 from modules import scripts
@@ -10,7 +11,7 @@ from modules.sd_samplers import KDiffusionSampler, sample_to_image
 # configurable section
 video_rate = 30
 author = 'https://github.com/vladmandic'
-cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i {inpath}/%5d.jpg -r {videorate} {preset} {minterpolate} {flags} -metadata title='{description}' -metadata description='{info}' -metadata author='stable-diffusion' -metadata album_artist='{author}' '{outfile}'" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i \"{inpath}/%5d.jpg\" -r {videorate} {preset} {minterpolate} {flags} -metadata title='{description}' -metadata description='{info}' -metadata author='stable-diffusion' -metadata album_artist='{author}' '{outfile}'" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23',
     'x265': '-vcodec libx265 -preset faster -crf 28',
@@ -96,7 +97,7 @@ class Script(scripts.Script):
             'steps': v['steps'],
             'current': current_step,
             'skip': skip_steps,
-            'info': v['info'].replace('\n', ' '),
+            'info': v['info'].translate(str.maketrans('', '', string.punctuation)),
             'model': v['info'].split('Model:')[1].split()[0] if ("Model:" in v['info']) else "unknown", # parse string if model info is present
             'embedding': v['info'].split('Used embeddings:')[1].split()[0] if ("Used embeddings:" in v['info']) else "none",  # parse string if embedding info is present
             'faces': v['face_restoration_model'],
@@ -127,15 +128,22 @@ class Script(scripts.Script):
                 return
             # append conditionals to dictionary
             params['minterpolate'] = "" if (params['interpolation'] == "none") else "-vf minterpolate=mi_mode={mi},fifo".format(mi = params['interpolation'])
-            params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + str(params['prompt'])) + ('.webm' if (params['codec'] == 'libvpx-vp9') else '.mp4')
+            
+            prompt = params['prompt'].translate(str.maketrans('', '', string.punctuation))
+            if len(prompt) > 64:
+                prompt = prompt[:64]
+            params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + prompt) + ('.webm' if (params['codec'] == 'libvpx-vp9') else '.mp4')
             params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
             print("Steps animation creating movie sequence:", params['outfile'])
             cmd = params['cli'].format(**params)
+            if debug:
+                print('Steps animation CMD:', cmd)
             # actual ffmpeg call
             os.system(cmd)
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
-                print("Steps animation removing {n} files from temp folder: {path}".format(path = root, n = len(files)))
+                if debug:
+                    print("Steps animation removing {n} files from temp folder: {path}".format(path = root, n = len(files)))
                 for file in files:
                     f = os.path.join(root, file)
                     if os.path.isfile(f):
