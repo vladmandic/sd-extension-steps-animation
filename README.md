@@ -17,6 +17,8 @@ https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-
 
 ### Notes
 
+- By default, previews are generated in quarter resolution  
+  For full resolution set `Settings` -> `Live previews` -> `Image creation progress preview mode` -> `Full`  
 - `ffmpeg` must be installed present in system path
 - Batch size and count must be set to **1** to use single seed value during entire animation  
 - Metadata details are stored in **title / description / artist** sections of a generated movie file  
