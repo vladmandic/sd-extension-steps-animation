@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import string
+import pathlib
 
 import gradio as gr
 from modules import scripts
@@ -23,6 +24,12 @@ presets = {
 current_step = 0
 orig_callback_state = KDiffusionSampler.callback_state
 
+def safestring(text: str):
+    lines = []
+    for line in text.splitlines():
+        lines.append(line.translate(str.maketrans('', '', string.punctuation)).strip())
+    res = ', '.join(lines)
+    return res[:1000]
 
 class Script(scripts.Script):
     # script title to show in ui
@@ -97,7 +104,7 @@ class Script(scripts.Script):
             'steps': v['steps'],
             'current': current_step,
             'skip': skip_steps,
-            'info': v['info'].translate(str.maketrans('', '', string.punctuation)),
+            'info': safestring(v['info']),
             'model': v['info'].split('Model:')[1].split()[0] if ("Model:" in v['info']) else "unknown", # parse string if model info is present
             'embedding': v['info'].split('Used embeddings:')[1].split()[0] if ("Used embeddings:" in v['info']) else "none",  # parse string if embedding info is present
             'faces': v['face_restoration_model'],
@@ -116,24 +123,23 @@ class Script(scripts.Script):
             'flags': "-movflags +faststart",
             'ffmpeg': shutil.which("ffmpeg"), # detect if ffmpeg executable is present in path
         }
+        # append conditionals to dictionary
+        params['minterpolate'] = "" if (params['interpolation'] == "none") else "-vf minterpolate=mi_mode={mi},fifo".format(mi = params['interpolation'])
+        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + safestring(params['prompt'])[:96] + ('.webm' if (params['codec'] == 'libvpx-vp9') else '.mp4'))
+        params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
         if debug:
             params['loglevel'] = 'info'
             print("Steps animation params:", json.dumps(params, indent = 2))
         if out_create:
+            if not os.path.isdir(params['outpath']):
+                print('Save animation create folder:', params['outpath'])
+                pathlib.Path(params['outpath']).mkdir(parents=True, exist_ok=True)
             if not os.path.isdir(params['inpath']) or not os.path.isdir(params['outpath']):
                 print('Steps animation error: folder not found', params['inpath'], params['outpath'])
                 return
             if params['ffmpeg'] is None:
                 print("Steps animation error: ffmpeg not found:")
                 return
-            # append conditionals to dictionary
-            params['minterpolate'] = "" if (params['interpolation'] == "none") else "-vf minterpolate=mi_mode={mi},fifo".format(mi = params['interpolation'])
-            
-            prompt = params['prompt'].translate(str.maketrans('', '', string.punctuation))
-            if len(prompt) > 64:
-                prompt = prompt[:64]
-            params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + prompt) + ('.webm' if (params['codec'] == 'libvpx-vp9') else '.mp4')
-            params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
             print("Steps animation creating movie sequence:", params['outfile'])
             cmd = params['cli'].format(**params)
             if debug:
