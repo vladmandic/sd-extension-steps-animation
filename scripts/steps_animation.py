@@ -103,8 +103,8 @@ class Script(scripts.Script):
         # create dictionary with all input and output parameters
         v = vars(processed)
         params = {
-            'prompt': v['prompt'],
-            'negative': v['negative_prompt'],
+            'prompt': safestring(v['prompt']),
+            'negative': safestring(v['negative_prompt']),
             'seed': v['seed'],
             'sampler': v['sampler_name'],
             'cfgscale': v['cfg_scale'],
