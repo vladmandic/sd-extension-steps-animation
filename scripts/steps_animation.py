@@ -16,7 +16,6 @@ video_rate = 30
 author = 'https://github.com/vladmandic'
 cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i \"{inpath}/%5d.jpg\" -r {videorate} {preset} {minterpolate} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 
-
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23',
     'x265': '-vcodec libx265 -preset faster -crf 28',
@@ -153,13 +152,13 @@ class Script(scripts.Script):
                 return
             if params['ffmpeg'] is None:
                 print("Steps animation error: ffmpeg not found:")
-                return
-            print("Steps animation creating movie sequence:", params['outfile'])
-            cmd = params['cli'].format(**params)
-            if debug:
-                print('Steps animation CMD:', cmd)
-            # actual ffmpeg call
-            os.system(cmd)
+            else:
+                print("Steps animation creating movie sequence:", params['outfile'])
+                cmd = params['cli'].format(**params)
+                if debug:
+                    print('Steps animation CMD:', cmd)
+                # actual ffmpeg call
+                os.system(cmd)
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
                 if debug:
