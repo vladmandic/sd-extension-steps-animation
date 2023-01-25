@@ -77,7 +77,7 @@ Default parameters used for each codec:
 
 - **h264**: `-vcodec libx264 -preset medium -crf 23`
 - **h265**: `-vcodec libx265 -preset faster -crf 28`
-- **vpx-vp9**: `-vcodec libvpx-vp9 -crf 34 -b:v 0 -deadline realtime -cpu-used 4`,
+- **vpx-vp9**: `-vcodec libvpx-vp9 -crf 34 -b:v 0 -deadline realtime -cpu-used 4`
 - **aom-av1**: `-vcodec libaom-av1 -crf 28 -b:v 0 -usage realtime -cpu-used 8 -pix_fmt yuv444p`
 - **prores**: `-vcodec prores_ks -profile:v 3 -vendor apl0 -bits_per_mb 8000 -pix_fmt yuv422p10le`
 
