@@ -22,6 +22,7 @@ presets = {
     'x265': '-vcodec libx265 -preset faster -crf 28',
     'vpx-vp9': '-vcodec libvpx-vp9 -crf 34 -b:v 0 -deadline realtime -cpu-used 4',
     'aom-av1': '-vcodec libaom-av1 -crf 28 -b:v 0 -usage realtime -cpu-used 8 -pix_fmt yuv444p',
+    'prores_ks': '-vcodec prores_ks -profile:v 3 -vendor apl0 -bits_per_mb 8000 -pix_fmt yuv422p10le',
 }
 
 
@@ -57,7 +58,7 @@ class Script(scripts.Script):
                 Creates animation sequence from denoised intermediate steps with video frame interpolation to achieve desired animation duration</a><br>""")
             with gr.Row():
                 is_enabled = gr.Checkbox(label = "Script Enabled", value = False)
-                codec = gr.Radio(label = 'Codec', choices = ['x264', 'x265', 'vpx-vp9', 'aom-av1'], value = 'x264')
+                codec = gr.Radio(label = 'Codec', choices = ['x264', 'x265', 'vpx-vp9', 'aom-av1', 'prores_ks'], value = 'x264')
                 interpolation = gr.Radio(label = 'Interpolation', choices = ['none', 'mci', 'blend'], value = 'mci')
             with gr.Row():
                 duration = gr.Slider(label = "Duration", minimum = 0.5, maximum = 120, step = 0.1, value = 10)
@@ -132,7 +133,13 @@ class Script(scripts.Script):
         }
         # append conditionals to dictionary
         params['minterpolate'] = "" if (params['interpolation'] == "none") else "-vf minterpolate=mi_mode={mi},fifo".format(mi = params['interpolation'])
-        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + safestring(params['prompt'])[:96] + ('.webm' if (params['codec'] == 'libvpx-vp9') else '.mp4'))
+        if params['codec'] == 'libvpx-vp9':
+            suffix = '.webm'
+        elif params['codec'] == 'libprores_ks':
+            suffix = '.mov'
+        else:
+            suffix = '.mp4'
+        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + safestring(params['prompt'])[:96] + suffix)
         params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
         if debug:
             params['loglevel'] = 'info'
