@@ -24,6 +24,7 @@ https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-
 - Metadata details are stored in **title / description / artist** sections of a generated movie file  
 - Use sampler that creates variations to make more interesting animations
   Good example is `Euler A`  
+  And a worst example is original `DDIM`  
 - Good rule-of-thumb is 1 sec animation duration for each 10 steps  
   That means that real FPS is 10 while interpolation raises it to 30  
 - Note: Default max step size in `automatic1111` is 100,  

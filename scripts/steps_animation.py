@@ -61,7 +61,7 @@ class Script(scripts.Script):
                 interpolation = gr.Radio(label = 'Interpolation', choices = ['none', 'mci', 'blend'], value = 'mci')
             with gr.Row():
                 duration = gr.Slider(label = "Duration", minimum = 0.5, maximum = 120, step = 0.1, value = 10)
-                skip_steps = gr.Slider(label = "Skip steps", minimum = 0, maximum = 100, step = 1, value = 5)
+                skip_steps = gr.Slider(label = "Skip steps", minimum = 0, maximum = 100, step = 1, value = 0)
             with gr.Row():
                 debug = gr.Checkbox(label = "Debug info", value = False)
                 run_incomplete = gr.Checkbox(label = "Run on incomplete", value = True)
@@ -123,7 +123,7 @@ class Script(scripts.Script):
             'interpolation': interpolation,
             'loglevel': 'error',
             'cli': cli_template,
-            'framerate': 1.0 * (current_step - skip_steps) / duration,
+            'framerate': (0, 1.0 * (current_step - skip_steps) / duration),
             'videorate': video_rate,
             'author': author,
             'preset': presets[codec],
@@ -144,6 +144,10 @@ class Script(scripts.Script):
             params['loglevel'] = 'info'
             print("Steps animation params:", json.dumps(params, indent = 2))
         if out_create:
+            nimg = len(os.listdir(params['inpath']))
+            if nimg == 0:
+                print('Save animation no interim images were created')
+                return
             if not os.path.isdir(params['outpath']):
                 print('Save animation create folder:', params['outpath'])
                 pathlib.Path(params['outpath']).mkdir(parents=True, exist_ok=True)
@@ -153,7 +157,7 @@ class Script(scripts.Script):
             if params['ffmpeg'] is None:
                 print("Steps animation error: ffmpeg not found:")
             else:
-                print("Steps animation creating movie sequence:", params['outfile'])
+                print("Steps animation creating movie sequence:", params['outfile'], "images:", nimg)
                 cmd = params['cli'].format(**params)
                 if debug:
                     print('Steps animation CMD:', cmd)
