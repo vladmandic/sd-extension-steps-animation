@@ -79,11 +79,14 @@ class Script(scripts.Script):
         if is_enabled:
             def callback_state(self, d):
                 global current_step
-                current_step = d["i"] + 1
+                current_step = int(d["i"]) + 1
                 if (skip_steps == 0) or (current_step > skip_steps):
                     image = sample_to_image(samples = d["denoised"], index = 0, approximation = None)
                     inpath = os.path.join(p.outpath_samples, tmp_path)
                     save_image(image, inpath, "", extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
+                    if debug:
+                        print(f"Steps animation saving interim image from step {current_step}")
+
                 return orig_callback_state(self, d)
 
             setattr(KDiffusionSampler, "callback_state", callback_state)
@@ -123,7 +126,7 @@ class Script(scripts.Script):
             'interpolation': interpolation,
             'loglevel': 'error',
             'cli': cli_template,
-            'framerate': (0, 1.0 * (current_step - skip_steps) / duration),
+            'framerate': max(0, 1.0 * (current_step - skip_steps) / duration),
             'videorate': video_rate,
             'author': author,
             'preset': presets[codec],
@@ -140,11 +143,15 @@ class Script(scripts.Script):
             suffix = '.mp4'
         params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + safestring(params['prompt'])[:96] + suffix)
         params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
+        current_step = 0 # reset back to zero
         if debug:
             params['loglevel'] = 'info'
             print("Steps animation params:", json.dumps(params, indent = 2))
         if out_create:
             nimg = len(os.listdir(params['inpath']))
+            if params['framerate'] == 0:
+                print('Save animation error: framerate is zero')
+                return
             if nimg == 0:
                 print('Save animation no interim images were created')
                 return
