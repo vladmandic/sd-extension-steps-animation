@@ -81,9 +81,12 @@ class Script(scripts.Script):
                 global current_step
                 current_step = int(d["i"]) + 1
                 if (skip_steps == 0) or (current_step > skip_steps):
-                    image = sample_to_image(samples = d["denoised"], index = 0, approximation = None)
-                    inpath = os.path.join(p.outpath_samples, tmp_path)
-                    save_image(image, inpath, "", extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
+                    try:
+                        image = sample_to_image(samples = d["denoised"], index = 0)
+                        inpath = os.path.join(p.outpath_samples, tmp_path)
+                        save_image(image, inpath, "", extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
+                    except Exception as e:
+                        print('Steps animation error: save intermediate image', e)
                     if debug:
                         print(f"Steps animation saving interim image from step {current_step}")
 
