@@ -8,8 +8,8 @@ import pathlib
 import gradio as gr
 from modules import scripts
 from modules.images import save_image
-from modules.sd_samplers import KDiffusionSampler, sample_to_image
-
+from modules.sd_samplers import sample_to_image
+from modules.sd_samplers_kdiffusion import KDiffusionSampler
 
 # configurable section
 video_rate = 30
