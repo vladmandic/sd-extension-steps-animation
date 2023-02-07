@@ -41,7 +41,7 @@ def safestring(text: str):
 class Script(scripts.Script):
     # script title to show in ui
     def title(self):
-        return "Steps animation"
+        return 'Steps animation'
 
 
     # is ui visible: process/postprocess triggers for always-visible scripts otherwise use run as entry point
@@ -51,25 +51,25 @@ class Script(scripts.Script):
 
     # ui components
     def ui(self, is_visible):
-        with gr.Accordion("Steps animation", open = False, elem_id="steps-animation"):
+        with gr.Accordion('Steps animation', open = False, elem_id='steps-animation'):
             gr.HTML("""
                 <a href="https://github.com/vladmandic/generative-art/tree/main/extensions">
                 Creates animation sequence from denoised intermediate steps with video frame interpolation to achieve desired animation duration</a><br>""")
             with gr.Row():
-                is_enabled = gr.Checkbox(label = "Script Enabled", value = False)
+                is_enabled = gr.Checkbox(label = 'Script Enabled', value = False)
                 codec = gr.Radio(label = 'Codec', choices = ['x264', 'x265', 'vpx-vp9', 'aom-av1', 'prores_ks'], value = 'x264')
                 interpolation = gr.Radio(label = 'Interpolation', choices = ['none', 'mci', 'blend'], value = 'mci')
             with gr.Row():
-                duration = gr.Slider(label = "Duration", minimum = 0.5, maximum = 120, step = 0.1, value = 10)
-                skip_steps = gr.Slider(label = "Skip steps", minimum = 0, maximum = 100, step = 1, value = 0)
+                duration = gr.Slider(label = 'Duration', minimum = 0.5, maximum = 120, step = 0.1, value = 10)
+                skip_steps = gr.Slider(label = 'Skip steps', minimum = 0, maximum = 100, step = 1, value = 0)
             with gr.Row():
-                debug = gr.Checkbox(label = "Debug info", value = False)
-                run_incomplete = gr.Checkbox(label = "Run on incomplete", value = True)
-                tmp_delete = gr.Checkbox(label = "Delete intermediate", value = True)
-                out_create = gr.Checkbox(label = "Create animation", value = True)
+                debug = gr.Checkbox(label = 'Debug info', value = False)
+                run_incomplete = gr.Checkbox(label = 'Run on incomplete', value = True)
+                tmp_delete = gr.Checkbox(label = 'Delete intermediate', value = True)
+                out_create = gr.Checkbox(label = 'Create animation', value = True)
             with gr.Row():
-                tmp_path = gr.Textbox(label = "Path for intermediate files", lines = 1, value = "intermediate")
-                out_path = gr.Textbox(label = "Path for output animation file", lines = 1, value = "animation")
+                tmp_path = gr.Textbox(label = 'Intermediate files path', lines = 1, value = 'intermediate')
+                out_path = gr.Textbox(label = 'Output animation path', lines = 1, value = 'animation')
 
         return [is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path]
 
@@ -79,33 +79,36 @@ class Script(scripts.Script):
         if is_enabled:
             def callback_state(self, d):
                 global current_step
-                current_step = int(d["i"]) + 1
+                current_step = int(d['i']) + 1
                 if (skip_steps == 0) or (current_step > skip_steps):
                     try:
-                        image = sample_to_image(samples = d["denoised"], index = 0)
+                        image = sample_to_image(samples = d['denoised'], index = 0)
                         inpath = os.path.join(p.outpath_samples, tmp_path)
-                        save_image(image, inpath, "", extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
+                        save_image(image, inpath, '', extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
                     except Exception as e:
                         print('Steps animation error: save intermediate image', e)
                     if debug:
-                        print(f"Steps animation saving interim image from step {current_step}")
+                        print(f'Steps animation saving interim image from step {current_step}')
 
                 return orig_callback_state(self, d)
 
-            setattr(KDiffusionSampler, "callback_state", callback_state)
+            setattr(KDiffusionSampler, 'callback_state', callback_state)
 
 
     # run at the end of sequence for always-visible scripts
     def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
         global current_step
-        setattr(KDiffusionSampler, "callback_state", orig_callback_state)
+        setattr(KDiffusionSampler, 'callback_state', orig_callback_state)
         if not is_enabled:
             return
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
-        if vars(processed)['steps'] != current_step:
+        if vars(processed)['steps'] != current_step and current_step > 0:
             print('Steps animation warning: postprocess early call', { 'current': current_step, 'target': vars(processed)['steps'] })
             if not run_incomplete:
                 return
+        if current_step == 0:
+            print('Save animation error: steps is zero, likely using unsupported sampler or interrupted')
+            return
         # create dictionary with all input and output parameters
         v = vars(processed)
         params = {
@@ -118,8 +121,8 @@ class Script(scripts.Script):
             'current': current_step,
             'skip': skip_steps,
             'info': safestring(v['info']),
-            'model': v['info'].split('Model:')[1].split()[0] if ("Model:" in v['info']) else "unknown", # parse string if model info is present
-            'embedding': v['info'].split('Used embeddings:')[1].split()[0] if ("Used embeddings:" in v['info']) else "none",  # parse string if embedding info is present
+            'model': v['info'].split('Model:')[1].split()[0] if ('Model:' in v['info']) else 'unknown', # parse string if model info is present
+            'embedding': v['info'].split('Used embeddings:')[1].split()[0] if ('Used embeddings:' in v['info']) else 'none',  # parse string if embedding info is present
             'faces': v['face_restoration_model'],
             'timestamp': v['job_timestamp'],
             'inpath': os.path.join(p.outpath_samples, tmp_path),
@@ -133,23 +136,23 @@ class Script(scripts.Script):
             'videorate': video_rate,
             'author': author,
             'preset': presets[codec],
-            'flags': "-movflags +faststart",
-            'ffmpeg': shutil.which("ffmpeg"), # detect if ffmpeg executable is present in path
+            'flags': '-movflags +faststart',
+            'ffmpeg': shutil.which('ffmpeg'), # detect if ffmpeg executable is present in path
         }
         # append conditionals to dictionary
-        params['minterpolate'] = "" if (params['interpolation'] == "none") else "-vf minterpolate=mi_mode={mi},fifo".format(mi = params['interpolation'])
+        params['minterpolate'] = '' if (params['interpolation'] == 'none') else '-vf minterpolate=mi_mode={mi},fifo'.format(mi = params['interpolation'])
         if params['codec'] == 'libvpx-vp9':
             suffix = '.webm'
         elif params['codec'] == 'libprores_ks':
             suffix = '.mov'
         else:
             suffix = '.mp4'
-        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + "-" + safestring(params['prompt'])[:96] + suffix)
-        params['description'] = "{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}".format(**params)
+        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + '-' + safestring(params['prompt'])[:96] + suffix)
+        params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
         current_step = 0 # reset back to zero
         if debug:
             params['loglevel'] = 'info'
-            print("Steps animation params:", json.dumps(params, indent = 2))
+            print('Steps animation params:', json.dumps(params, indent = 2))
         if out_create:
             nimg = len(os.listdir(params['inpath']))
             if params['framerate'] == 0:
@@ -165,9 +168,9 @@ class Script(scripts.Script):
                 print('Steps animation error: folder not found', params['inpath'], params['outpath'])
                 return
             if params['ffmpeg'] is None:
-                print("Steps animation error: ffmpeg not found:")
+                print('Steps animation error: ffmpeg not found:')
             else:
-                print("Steps animation creating movie sequence:", params['outfile'], "images:", nimg)
+                print('Steps animation creating movie sequence:', params['outfile'], 'images:', nimg)
                 cmd = params['cli'].format(**params)
                 if debug:
                     print('Steps animation CMD:', cmd)
@@ -176,7 +179,7 @@ class Script(scripts.Script):
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
                 if debug:
-                    print("Steps animation removing {n} files from temp folder: {path}".format(path = root, n = len(files)))
+                    print('Steps animation removing {n} files from temp folder: {path}'.format(path = root, n = len(files)))
                 for file in files:
                     f = os.path.join(root, file)
                     if os.path.isfile(f):
