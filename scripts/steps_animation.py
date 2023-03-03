@@ -97,6 +97,25 @@ class Script(scripts.Script):
 
     # run at the end of sequence for always-visible scripts
     def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
+
+        def exec_cmd(cmd: string, debug: bool = False):
+            import subprocess
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env=os.environ)
+            stdout = result.stdout.decode(encoding="utf8", errors="ignore") if len(result.stdout) > 0 else ''
+            stderr = result.stderr.decode(encoding="utf8", errors="ignore") if len(result.stdout) > 0 else ''
+            if result.returncode != 0 or debug:
+                print('Steps animation', { 'command': cmd, 'returncode': result.returncode, 'stdout': stdout, 'stderr': stderr })
+            return stdout if result.returncode == 0 else stderr
+
+        def check_codec(codec: string, debug: bool = False):
+            stdout = exec_cmd(f'ffmpeg -hide_banner -encoders', debug=False)
+            lines = stdout.splitlines()
+            lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
+            codecs = [line.split()[1] for line in lines]
+            if debug:
+                print('Steps animation supported codecs', codecs)
+            return codec in codecs
+
         global current_step
         setattr(KDiffusionSampler, 'callback_state', orig_callback_state)
         if not is_enabled:
@@ -167,15 +186,16 @@ class Script(scripts.Script):
             if not os.path.isdir(params['inpath']) or not os.path.isdir(params['outpath']):
                 print('Steps animation error: folder not found', params['inpath'], params['outpath'])
                 return
+
             if params['ffmpeg'] is None:
                 print('Steps animation error: ffmpeg not found:')
+            elif not check_codec(params['codec'], debug):
+                print(f"Steps animation error: codec {params['codec']} not supported by ffmpeg")
             else:
                 print('Steps animation creating movie sequence:', params['outfile'], 'images:', nimg)
                 cmd = params['cli'].format(**params)
-                if debug:
-                    print('Steps animation CMD:', cmd)
                 # actual ffmpeg call
-                os.system(cmd)
+                exec_cmd(cmd, debug)
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
                 if debug:
