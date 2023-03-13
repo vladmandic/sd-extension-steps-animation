@@ -7,6 +7,7 @@ import pathlib
 
 import gradio as gr
 from modules import scripts
+from modules import shared
 from modules.images import save_image
 from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
@@ -14,7 +15,7 @@ from modules.sd_samplers_kdiffusion import KDiffusionSampler
 # configurable section
 video_rate = 30
 author = 'https://github.com/vladmandic'
-cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -i \"{inpath}/%5d.jpg\" -r {videorate} {preset} {minterpolate} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {skip} -i \"{inpath}/%3d-{short_name}.{extension}\" -r {videorate} {preset} {minterpolate} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23',
@@ -26,6 +27,7 @@ presets = {
 
 
 # internal state variables
+initialized = False
 current_step = 0
 orig_callback_state = KDiffusionSampler.callback_state
 
@@ -39,6 +41,15 @@ def safestring(text: str):
 
 
 class Script(scripts.Script):
+    def __init__(self):
+        global initialized
+        if not initialized:
+            initialized = True
+            if shared.opts.data['show_progress_type'] != 'Full':
+                print(f"Save animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
+                shared.opts.data['show_progress_type'] = 'Full'
+        super().__init__()
+
     # script title to show in ui
     def title(self):
         return 'Steps animation'
@@ -80,15 +91,16 @@ class Script(scripts.Script):
             def callback_state(self, d):
                 global current_step
                 current_step = int(d['i']) + 1
+                fn = f"{int(d['i']):03d}-{str(p.all_seeds[0])}-{safestring(p.prompt)[:96]}"
+                ext = shared.opts.data['samples_format']
                 if (skip_steps == 0) or (current_step > skip_steps):
                     try:
                         image = sample_to_image(samples = d['denoised'], index = 0)
                         inpath = os.path.join(p.outpath_samples, tmp_path)
-                        save_image(image, inpath, '', extension = 'jpg', short_filename = True, no_prompt = True) # filename using 00000 format so its easier for ffmpeg sequence parsing
+                        save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn) # filename using 00000 format so its easier for ffmpeg sequence parsing
                     except Exception as e:
                         print('Steps animation error: save intermediate image', e)
-                    if debug:
-                        print(f'Steps animation saving interim image from step {current_step}')
+                    if debug: print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
 
                 return orig_callback_state(self, d)
 
@@ -100,20 +112,19 @@ class Script(scripts.Script):
 
         def exec_cmd(cmd: string, debug: bool = False):
             import subprocess
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True, env=os.environ)
-            stdout = result.stdout.decode(encoding="utf8", errors="ignore") if len(result.stdout) > 0 else ''
-            stderr = result.stderr.decode(encoding="utf8", errors="ignore") if len(result.stdout) > 0 else ''
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ)
             if result.returncode != 0 or debug:
-                print('Steps animation', { 'command': cmd, 'returncode': result.returncode, 'stdout': stdout, 'stderr': stderr })
-            return stdout if result.returncode == 0 else stderr
+                print('Steps animation', { 'command': cmd, 'returncode': result.returncode })
+                if len(result.stdout) > 0: print('Steps animation output', result.stdout)
+                if len(result.stderr) > 0: print('Steps animation output', result.stderr)
+            return result.stdout if result.returncode == 0 else result.stderr
 
         def check_codec(codec: string, debug: bool = False):
             stdout = exec_cmd(f'ffmpeg -hide_banner -encoders', debug=False)
             lines = stdout.splitlines()
             lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
             codecs = [line.split()[1] for line in lines]
-            if debug:
-                print('Steps animation supported codecs', codecs)
+            if debug: print('Steps animation supported codecs', codecs)
             return codec in codecs
 
         global current_step
@@ -123,8 +134,7 @@ class Script(scripts.Script):
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
         if vars(processed)['steps'] != current_step and current_step > 0:
             print('Steps animation warning: postprocess early call', { 'current': current_step, 'target': vars(processed)['steps'] })
-            if not run_incomplete:
-                return
+            if not run_incomplete: return
         if current_step == 0:
             print('Save animation error: steps is zero, likely using unsupported sampler or interrupted')
             return
@@ -155,29 +165,30 @@ class Script(scripts.Script):
             'videorate': video_rate,
             'author': author,
             'preset': presets[codec],
+            'extension': shared.opts.data['samples_format'],
+            'short_name': str(v['seed']) + '-' + safestring(v['prompt'])[:96],
             'flags': '-movflags +faststart',
             'ffmpeg': shutil.which('ffmpeg'), # detect if ffmpeg executable is present in path
+            'ffprobe': shutil.which('ffprobe'), # detect if ffmpeg executable is present in path
         }
         # append conditionals to dictionary
         params['minterpolate'] = '' if (params['interpolation'] == 'none') else '-vf minterpolate=mi_mode={mi},fifo'.format(mi = params['interpolation'])
-        if params['codec'] == 'libvpx-vp9':
-            suffix = '.webm'
-        elif params['codec'] == 'libprores_ks':
-            suffix = '.mov'
-        else:
-            suffix = '.mp4'
-        params['outfile'] = os.path.join(params['outpath'], str(params['seed']) + '-' + safestring(params['prompt'])[:96] + suffix)
+        if params['codec'] == 'libvpx-vp9': suffix = '.webm'
+        elif params['codec'] == 'libprores_ks': suffix = '.mov'
+        else: suffix = '.mp4'
+        params['outfile'] = os.path.join(params['outpath'], params['short_name'] + suffix)
         params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
         current_step = 0 # reset back to zero
+        imgs = [f for f in os.listdir(params['inpath']) if params['short_name'] in f]
         if debug:
             params['loglevel'] = 'info'
             print('Steps animation params:', json.dumps(params, indent = 2))
+            print('Steps animation created images:', imgs)
         if out_create:
-            nimg = len(os.listdir(params['inpath']))
             if params['framerate'] == 0:
                 print('Save animation error: framerate is zero')
                 return
-            if nimg == 0:
+            if len(imgs) == 0:
                 print('Save animation no interim images were created')
                 return
             if not os.path.isdir(params['outpath']):
@@ -192,14 +203,21 @@ class Script(scripts.Script):
             elif not check_codec(params['codec'], debug):
                 print(f"Steps animation error: codec {params['codec']} not supported by ffmpeg")
             else:
-                print('Steps animation creating movie sequence:', params['outfile'], 'images:', nimg)
+                print('Steps animation creating movie sequence:', params['outfile'], 'images:', len(imgs))
                 cmd = params['cli'].format(**params)
                 # actual ffmpeg call
                 exec_cmd(cmd, debug)
+
+            if debug:
+                if params['ffprobe'] is None:
+                    print('Steps animation verify error: ffprobe not found')
+                else:
+                    probe = f"ffprobe -hide_banner -print_format json -show_streams \"{params['outfile']}\""
+                    exec_cmd(probe, debug)
+
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
-                if debug:
-                    print('Steps animation removing {n} files from temp folder: {path}'.format(path = root, n = len(files)))
+                if debug: print('Steps animation removing {n} files from temp folder: {path}'.format(path = root, n = len(files)))
                 for file in files:
                     f = os.path.join(root, file)
                     if os.path.isfile(f):
