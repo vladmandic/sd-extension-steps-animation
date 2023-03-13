@@ -9,6 +9,7 @@ import gradio as gr
 from modules import scripts
 from modules import shared
 from modules.images import save_image
+from modules.processing import create_infotext
 from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
 
@@ -89,18 +90,23 @@ class Script(scripts.Script):
     def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
         if is_enabled:
             def callback_state(self, d):
-                global current_step
-                current_step = int(d['i']) + 1
-                fn = f"{int(d['i']):03d}-{str(p.all_seeds[0])}-{safestring(p.prompt)[:96]}"
-                ext = shared.opts.data['samples_format']
-                if (skip_steps == 0) or (current_step > skip_steps):
-                    try:
-                        image = sample_to_image(samples = d['denoised'], index = 0)
-                        inpath = os.path.join(p.outpath_samples, tmp_path)
-                        save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn) # filename using 00000 format so its easier for ffmpeg sequence parsing
-                    except Exception as e:
-                        print('Steps animation error: save intermediate image', e)
-                    if debug: print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
+                for index in range(0, p.batch_size):
+                    if index > 0:
+                        continue # only process first image in batch
+                    global current_step
+                    current_step = int(d['i']) + 1
+                    fn = f"{int(d['i']):03d}-{str(p.all_seeds[0])}-{safestring(p.prompt)[:96]}"
+                    ext = shared.opts.data['samples_format']
+                    if (skip_steps == 0) or (current_step > skip_steps):
+                        try:
+                            image = sample_to_image(samples = d['denoised'], index = 0)
+                            infotext = create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments=[], position_in_batch=index % p.batch_size, iteration=index // p.batch_size)
+                            infotext = f"{infotext}, intermediate: {int(d['i']):03d}"
+                            inpath = os.path.join(p.outpath_samples, tmp_path)
+                            save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
+                        except Exception as e:
+                            print('Steps animation error: save intermediate image', e)
+                        if debug: print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
 
                 return orig_callback_state(self, d)
 
