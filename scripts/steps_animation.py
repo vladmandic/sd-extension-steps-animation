@@ -30,6 +30,7 @@ presets = {
 # internal state variables
 initialized = False
 current_step = 0
+current_preview_mode = 'undefined'
 orig_callback_state = KDiffusionSampler.callback_state
 
 
@@ -46,9 +47,6 @@ class Script(scripts.Script):
         global initialized
         if not initialized:
             initialized = True
-            if shared.opts.data['show_progress_type'] != 'Full':
-                print(f"Save animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
-                shared.opts.data['show_progress_type'] = 'Full'
         super().__init__()
 
     # script title to show in ui
@@ -89,6 +87,13 @@ class Script(scripts.Script):
     # runs on each step for always-visible scripts
     def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
         if is_enabled:
+            # set preview mode to full so interim images have full resolution
+            if shared.opts.data['show_progress_type'] != 'Full':
+                global current_preview_mode
+                current_preview_mode = shared.opts.data['show_progress_type']
+                print(f"Save animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
+                shared.opts.data['show_progress_type'] = 'Full'
+
             def callback_state(self, d):
                 for index in range(0, p.batch_size):
                     if index > 0:
@@ -137,6 +142,11 @@ class Script(scripts.Script):
         setattr(KDiffusionSampler, 'callback_state', orig_callback_state)
         if not is_enabled:
             return
+
+        # reset preview mode
+        if current_preview_mode != 'undefined':
+            shared.opts.data['show_progress_type'] = current_preview_mode
+
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
         if vars(processed)['steps'] != current_step and current_step > 0:
             print('Steps animation warning: postprocess early call', { 'current': current_step, 'target': vars(processed)['steps'] })
