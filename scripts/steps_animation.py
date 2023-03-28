@@ -3,9 +3,10 @@ import os
 import shutil
 import string
 import pathlib
-
+import subprocess
 
 import gradio as gr
+
 from modules import scripts
 from modules import shared
 from modules.images import save_image
@@ -44,7 +45,7 @@ def safestring(text: str):
 
 class Script(scripts.Script):
     def __init__(self):
-        global initialized
+        global initialized # pylint: disable=global-statement
         if not initialized:
             initialized = True
         super().__init__()
@@ -89,7 +90,7 @@ class Script(scripts.Script):
         if is_enabled:
             # set preview mode to full so interim images have full resolution
             if shared.opts.data['show_progress_type'] != 'Full':
-                global current_preview_mode
+                global current_preview_mode # pylint: disable=global-statement
                 current_preview_mode = shared.opts.data['show_progress_type']
                 print(f"Save animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
                 shared.opts.data['show_progress_type'] = 'Full'
@@ -98,7 +99,7 @@ class Script(scripts.Script):
                 for index in range(0, p.batch_size):
                     if index > 0:
                         continue # only process first image in batch
-                    global current_step
+                    global current_step # pylint: disable=global-statement
                     current_step = int(d['i']) + 1
                     fn = f"{int(d['i']):03d}-{str(p.all_seeds[0])}-{safestring(p.prompt)[:96]}"
                     ext = shared.opts.data['samples_format']
@@ -111,7 +112,8 @@ class Script(scripts.Script):
                             save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
                         except Exception as e:
                             print('Steps animation error: save intermediate image', e)
-                        if debug: print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
+                        if debug:
+                            print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
 
                 return orig_callback_state(self, d)
 
@@ -122,23 +124,25 @@ class Script(scripts.Script):
     def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
 
         def exec_cmd(cmd: string, debug: bool = False):
-            import subprocess
-            result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ)
+            result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ, check=False)
             if result.returncode != 0 or debug:
                 print('Steps animation', { 'command': cmd, 'returncode': result.returncode })
-                if len(result.stdout) > 0: print('Steps animation output', result.stdout)
-                if len(result.stderr) > 0: print('Steps animation output', result.stderr)
+                if len(result.stdout) > 0:
+                    print('Steps animation output', result.stdout)
+                if len(result.stderr) > 0:
+                    print('Steps animation output', result.stderr)
             return result.stdout if result.returncode == 0 else result.stderr
 
         def check_codec(codec: string, debug: bool = False):
-            stdout = exec_cmd(f'ffmpeg -hide_banner -encoders', debug=False)
+            stdout = exec_cmd('ffmpeg -hide_banner -encoders', debug=False)
             lines = stdout.splitlines()
             lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
             codecs = [line.split()[1] for line in lines]
-            if debug: print('Steps animation supported codecs', codecs)
+            if debug:
+                print('Steps animation supported codecs', codecs)
             return codec in codecs
 
-        global current_step
+        global current_step # pylint: disable=global-statement
         setattr(KDiffusionSampler, 'callback_state', orig_callback_state)
         if not is_enabled:
             return
@@ -150,7 +154,8 @@ class Script(scripts.Script):
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
         if vars(processed)['steps'] != current_step and current_step > 0:
             print('Steps animation warning: postprocess early call', { 'current': current_step, 'target': vars(processed)['steps'] })
-            if not run_incomplete: return
+            if not run_incomplete:
+                return
         if current_step == 0:
             print('Save animation error: steps is zero, likely using unsupported sampler or interrupted')
             return
@@ -188,10 +193,13 @@ class Script(scripts.Script):
             'ffprobe': shutil.which('ffprobe'), # detect if ffmpeg executable is present in path
         }
         # append conditionals to dictionary
-        params['minterpolate'] = '' if (params['interpolation'] == 'none') else '-vf minterpolate=mi_mode={mi},fifo'.format(mi = params['interpolation'])
-        if params['codec'] == 'libvpx-vp9': suffix = '.webm'
-        elif params['codec'] == 'libprores_ks': suffix = '.mov'
-        else: suffix = '.mp4'
+        params['minterpolate'] = '' if (params['interpolation'] == 'none') else f'-vf minterpolate=mi_mode={params["interpolation"]},fifo'
+        if params['codec'] == 'libvpx-vp9':
+            suffix = '.webm'
+        elif params['codec'] == 'libprores_ks':
+            suffix = '.mov'
+        else:
+            suffix = '.mp4'
         params['outfile'] = os.path.join(params['outpath'], params['short_name'] + suffix)
         params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | current {current} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
         current_step = 0 # reset back to zero
@@ -233,7 +241,8 @@ class Script(scripts.Script):
 
         if tmp_delete:
             for root, _dirs, files in os.walk(params['inpath']):
-                if debug: print('Steps animation removing {n} files from temp folder: {path}'.format(path = root, n = len(files)))
+                if debug:
+                    print(f'Steps animation removing {len(files)} files from temp folder: {root}')
                 for file in files:
                     f = os.path.join(root, file)
                     if os.path.isfile(f):
