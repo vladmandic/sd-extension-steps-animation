@@ -13,6 +13,7 @@ from modules.images import save_image
 from modules.processing import create_infotext
 from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
+from modules.sd_samplers_compvis import VanillaStableDiffusionSampler
 
 # configurable section
 video_rate = 30
@@ -29,10 +30,9 @@ presets = {
 
 
 # internal state variables
-initialized = False
 current_step = 0
 current_preview_mode = 'undefined'
-orig_callback_state = KDiffusionSampler.callback_state
+orig_callback_state = 'undefined'
 
 
 def safestring(text: str):
@@ -45,9 +45,6 @@ def safestring(text: str):
 
 class Script(scripts.Script):
     def __init__(self):
-        global initialized # pylint: disable=global-statement
-        if not initialized:
-            initialized = True
         super().__init__()
 
     # script title to show in ui
@@ -88,36 +85,52 @@ class Script(scripts.Script):
     # runs on each step for always-visible scripts
     def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
         if is_enabled:
+            # save original callback
+            global orig_callback_state
+            if orig_callback_state == 'undefined':
+                if debug:
+                    print(f'Steps animation patching sampler callback for: {p.sampler_name}')
+                if p.sampler_name in ['DDIM', 'PLMS', 'UniPC']:
+                    orig_callback_state = VanillaStableDiffusionSampler.update_step
+                else:
+                    orig_callback_state = KDiffusionSampler.callback_state
+
             # set preview mode to full so interim images have full resolution
             if shared.opts.data['show_progress_type'] != 'Full':
                 global current_preview_mode # pylint: disable=global-statement
                 current_preview_mode = shared.opts.data['show_progress_type']
-                print(f"Save animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
+                print(f"Steps animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
                 shared.opts.data['show_progress_type'] = 'Full'
 
+            # define custom callback
             def callback_state(self, d):
+                res = orig_callback_state(self, d) # execute original callback
                 for index in range(0, p.batch_size):
                     if index > 0:
                         continue # only process first image in batch
                     global current_step # pylint: disable=global-statement
-                    current_step = int(d['i']) + 1
-                    fn = f"{int(d['i']):03d}-{str(p.all_seeds[0])}-{safestring(p.prompt)[:96]}"
+                    current_step = shared.state.sampling_step + 1
+                    fn = f"{shared.state.sampling_step:03d}-{str(p.all_seeds[index])}-{safestring(p.all_prompts[index])[:96]}"
                     ext = shared.opts.data['samples_format']
                     if (skip_steps == 0) or (current_step > skip_steps):
                         try:
-                            image = sample_to_image(samples = d['denoised'], index = 0)
+                            image = sample_to_image(samples = shared.state.current_latent, index = 0)
                             infotext = create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments=[], position_in_batch=index % p.batch_size, iteration=index // p.batch_size)
-                            infotext = f"{infotext}, intermediate: {int(d['i']):03d}"
+                            infotext = f"{infotext}, intermediate: {current_step:03d}"
                             inpath = os.path.join(p.outpath_samples, tmp_path)
                             save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
                         except Exception as e:
                             print('Steps animation error: save intermediate image', e)
                         if debug:
                             print(f'Steps animation saving interim image from step {current_step}: {fn}.{ext}')
+                return res
 
-                return orig_callback_state(self, d)
-
-            setattr(KDiffusionSampler, 'callback_state', callback_state)
+            # set custom callback
+            if orig_callback_state != 'undefined':
+                if p.sampler_name in ['DDIM', 'PLMS', 'UniPC']:
+                    setattr(VanillaStableDiffusionSampler, 'update_step', callback_state)
+                else:
+                    setattr(KDiffusionSampler, 'callback_state', callback_state)
 
 
     # run at the end of sequence for always-visible scripts
@@ -142,23 +155,34 @@ class Script(scripts.Script):
                 print('Steps animation supported codecs', codecs)
             return codec in codecs
 
-        global current_step # pylint: disable=global-statement
-        setattr(KDiffusionSampler, 'callback_state', orig_callback_state)
-        if not is_enabled:
-            return
+        # restore sampler callback
+        global orig_callback_state
+        if orig_callback_state != 'undefined':
+            if debug:
+                print(f'Steps animation restoring sampler callback for: {p.sampler_name}, {type(orig_callback_state)}')
+            if p.sampler_name in ['DDIM', 'PLMS', 'UniPC']:
+                VanillaStableDiffusionSampler.update_step = orig_callback_state
+            else:
+                KDiffusionSampler.callback_state = orig_callback_state
+            orig_callback_state = 'undefined'
 
         # reset preview mode
         if current_preview_mode != 'undefined':
             shared.opts.data['show_progress_type'] = current_preview_mode
 
+        if not is_enabled:
+            return
+
+        # callback was never initiated
+        global current_step # pylint: disable=global-statement
+        if current_step == 0:
+            print('Steps animation error: steps is zero, likely using unsupported sampler or interrupted')
+            return
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
-        if vars(processed)['steps'] != current_step and current_step > 0:
-            print('Steps animation warning: postprocess early call', { 'current': current_step, 'target': vars(processed)['steps'] })
+        if vars(processed)['steps'] < vars(processed)['steps']:
+            print('Steps animation warning: postprocess early call', { 'current': vars(processed)['steps'], 'target': vars(processed)['steps'] })
             if not run_incomplete:
                 return
-        if current_step == 0:
-            print('Save animation error: steps is zero, likely using unsupported sampler or interrupted')
-            return
         # create dictionary with all input and output parameters
         v = vars(processed)
         params = {
@@ -210,13 +234,13 @@ class Script(scripts.Script):
             print('Steps animation created images:', imgs)
         if out_create:
             if params['framerate'] == 0:
-                print('Save animation error: framerate is zero')
+                print('Steps animation error: framerate is zero')
                 return
             if len(imgs) == 0:
-                print('Save animation no interim images were created')
+                print('Steps animation no interim images were created')
                 return
             if not os.path.isdir(params['outpath']):
-                print('Save animation create folder:', params['outpath'])
+                print('Steps animation create folder:', params['outpath'])
                 pathlib.Path(params['outpath']).mkdir(parents=True, exist_ok=True)
             if not os.path.isdir(params['inpath']) or not os.path.isdir(params['outpath']):
                 print('Steps animation error: folder not found', params['inpath'], params['outpath'])
