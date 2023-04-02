@@ -11,11 +11,11 @@ Resulting movie fiels are typically very small (*~1MB being average*) due to opt
 
 ![screenshot](steps-animation.jpg)
 
-### Example
+## Example
 
 https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-bc5d-9c24a9146d38.mp4
 
-### Notes
+## Notes
 
 - By default, previews are generated in quarter resolution  
   For full resolution set `Settings` -> `Live previews` -> `Image creation progress preview mode` -> `Full`  
@@ -40,7 +40,7 @@ https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-
   - **None**: Simply extends duration each image to match desired duration
   - **MCI**: Motion compensated interpolation
   - **Blend**: Color blend interpolation
-- **Skip initial steps**: Allows to skip n initial steps when creating animation as they may be overly noisy 
+- **Skip initial steps**: Allows to skip n initial steps when creating animation as they may be overly noisy  
 - **Print debug info**: Prints verbose information on console  
 - **Run on incomplete data**: If run was interrupted, should animation creation still run on partial results  
   *Note*: This also happens when using some samplers (e.g. DPM adaptive)  
@@ -52,6 +52,20 @@ https://user-images.githubusercontent.com/57876960/212490617-f0444799-50e5-485e-
 - **Path for intermediate files**: Relative to save location  
 - **Path for output animation file**: Relative to save location  
 
+### Naming
+
+- Intermediate files have file format of  
+`<batch-of-batch-count><batch-of-batch-size><current-step>-<seed>-<prompt>.<samples-extension>`
+- Output animation file has file format of  
+`<seed>-<prompt>.<codec-extension>`
+
+Where:
+
+- Batch values are 2 digits padded with leading zeros
+- Step value is 3 digits padded with leading zeros
+- Seed value is actual seed extrapolated from current batch, not input seed
+- Prompt is parsed to be file-system safe and cropped to 96 characters
+
 ### Performance
 
 Dependent on your system and settings used to produce images  
@@ -60,6 +74,7 @@ Type of interpolation used has direct impact on performance:
 **None** and **Blend** results in almost instant animation creation while **MCI** takes twice as long as its a two-pass interpolation method
 
 *Example*: Using *Euler A* sampler with 100 steps to produce a 10 sec blend animation of a single trained embedding with 30 frames-per-second takes just ~1 min on nVidia RTX3060  
+
 ### Interpolation
 
 Uses `ffmpeg` [minterpolate](https://ffmpeg.org/ffmpeg-filters.html#minterpolate) filter
