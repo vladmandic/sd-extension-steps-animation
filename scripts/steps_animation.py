@@ -17,7 +17,7 @@ from modules.sd_samplers_kdiffusion import KDiffusionSampler
 from modules.sd_samplers_compvis import VanillaStableDiffusionSampler
 
 try:
-    from rich import print
+    from rich import print # pylint: disable=redefined-builtin
 except:
     pass
 
