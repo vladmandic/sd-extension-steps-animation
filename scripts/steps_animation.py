@@ -16,6 +16,9 @@ from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
 from modules.sd_samplers_compvis import VanillaStableDiffusionSampler
 
+import platform
+import ntpath
+
 try:
     from rich import print # pylint: disable=redefined-builtin
 except:
@@ -130,6 +133,8 @@ class Script(scripts.Script):
                             infotext = create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments=[], position_in_batch=batch, iteration=p.iteration)
                             infotext = f"{infotext}, intermediate: {current_step:03d}"
                             inpath = os.path.join(p.outpath_samples, tmp_path)
+                            if platform.system() == 'Windows':
+                                inpath.replace(os.sep, ntpath.sep)
                             save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
                         except Exception as e:
                            print('Steps animation error: save intermediate image', e)
@@ -228,6 +233,10 @@ class Script(scripts.Script):
             'ffmpeg': shutil.which('ffmpeg'), # detect if ffmpeg executable is present in path
             'ffprobe': shutil.which('ffprobe'), # detect if ffmpeg executable is present in path
         }
+        if platform.system() == 'Windows':
+            params['inpath'].replace(os.sep, ntpath.sep)
+            params['outpath'].replace(os.sep, ntpath.sep)
+
         # append conditionals to dictionary
         params['minterpolate'] = '' if (params['interpolation'] == 'none') else f'-vf minterpolate=mi_mode={params["interpolation"]},fifo'
         if params['codec'] == 'libvpx-vp9':
