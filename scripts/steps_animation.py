@@ -25,7 +25,7 @@ except:
 video_rate = 30
 name_length = 96
 author = 'https://github.com/vladmandic'
-cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {sequence} -i \"{inpath}/%7d-{short_name}.{extension}\" -r {videorate} {preset} {minterpolate} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {sequence} -i \"{inpath}/%7d-{short_name}.{extension}\" -r {videorate} {preset} {vfilters} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23',
@@ -78,6 +78,8 @@ class Script(scripts.Script):
                 duration = gr.Slider(label = 'Duration', minimum = 0.5, maximum = 120, step = 0.1, value = 10)
                 skip_steps = gr.Slider(label = 'Skip steps', minimum = 0, maximum = 100, step = 1, value = 0)
             with gr.Row():
+                last_frame_duration = gr.Slider(label = 'Additional duration of the last frame', minimum = 00, maximum = 10, step = 1, value = 0)
+            with gr.Row():
                 debug = gr.Checkbox(label = 'Debug info', value = False)
                 run_incomplete = gr.Checkbox(label = 'Run on incomplete', value = True)
                 tmp_delete = gr.Checkbox(label = 'Delete intermediate', value = True)
@@ -86,11 +88,11 @@ class Script(scripts.Script):
                 tmp_path = gr.Textbox(label = 'Intermediate files path', lines = 1, value = 'intermediate')
                 out_path = gr.Textbox(label = 'Output animation path', lines = 1, value = 'animation')
 
-        return [is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path]
+        return [is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path]
 
 
     # runs on each step for always-visible scripts
-    def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
+    def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
         if is_enabled:
             # save original callback
             global orig_callback_state
@@ -144,7 +146,7 @@ class Script(scripts.Script):
 
 
     # run at the end of sequence for always-visible scripts
-    def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
+    def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
 
         def exec_cmd(cmd: string, debug: bool = False):
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ, check=False)
@@ -214,11 +216,12 @@ class Script(scripts.Script):
             'inpath': os.path.join(p.outpath_samples, tmp_path),
             'outpath': os.path.join(p.outpath_samples, out_path),
             'codec': 'lib' + codec,
-            'duration': duration,
+            'duration': duration, #- last_frame_duration,
+            'last_frame_duration': last_frame_duration,
             'interpolation': interpolation,
             'loglevel': 'error',
             'cli': cli_template,
-            'framerate': max(0, 1.0 * (current_step - skip_steps) / duration),
+            'framerate': max(0, 1.0 * (current_step - skip_steps) / duration), #(duration - last_frame_duration)),
             'videorate': video_rate,
             'author': author,
             'preset': presets[codec],
@@ -229,7 +232,20 @@ class Script(scripts.Script):
             'ffprobe': shutil.which('ffprobe'), # detect if ffmpeg executable is present in path
         }
         # append conditionals to dictionary
-        params['minterpolate'] = '' if (params['interpolation'] == 'none') else f'-vf minterpolate=mi_mode={params["interpolation"]},fifo'
+        vfilters = ''
+        params['minterpolate'] = '' if (params['interpolation'] == 'none') else f'minterpolate=mi_mode={params["interpolation"]},fifo'
+        params['tpad'] = '' if params['last_frame_duration'] == 0 else f'tpad=stop_mode=clone:stop_duration={params["last_frame_duration"]}'
+        if params['minterpolate'] != '' or params['tpad'] != '':
+            vfilters = '-vf '
+        if params['minterpolate'] != '':
+            vfilters = vfilters + params['minterpolate']
+        if params['tpad'] != '':
+            if params['minterpolate'] != '':
+                vfilters = vfilters + ',' + params['tpad']
+            else:
+                vfilters = vfilters + params['tpad']
+        params['vfilters'] = vfilters
+
         if params['codec'] == 'libvpx-vp9':
             suffix = '.webm'
         elif params['codec'] == 'libprores_ks':
