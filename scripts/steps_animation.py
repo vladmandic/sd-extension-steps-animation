@@ -28,8 +28,8 @@ author = 'https://github.com/vladmandic'
 cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {sequence} -i \"{inpath}/%7d-{short_name}.{extension}\" -r {videorate} {preset} {vfilters} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 
 presets = {
-    'x264': '-vcodec libx264 -preset medium -crf 23',
-    'x265': '-vcodec libx265 -preset faster -crf 28',
+    'x264': '-vcodec libx264 -preset medium -crf 23 -pix_fmt yuv420p',
+    'x265': '-vcodec libx265 -preset faster -crf 28 -pix_fmt yuv420p',
     'vpx-vp9': '-vcodec libvpx-vp9 -crf 34 -b:v 0 -deadline realtime -cpu-used 4',
     'aom-av1': '-vcodec libaom-av1 -crf 28 -b:v 0 -usage realtime -cpu-used 8 -pix_fmt yuv444p',
     'prores_ks': '-vcodec prores_ks -profile:v 3 -vendor apl0 -bits_per_mb 8000 -pix_fmt yuv422p10le',
@@ -40,6 +40,7 @@ presets = {
 current_step = 0
 current_preview_mode = 'undefined'
 orig_callback_state = 'undefined'
+temp_files = []
 
 
 def safestring(text: str):
@@ -51,7 +52,7 @@ def safestring(text: str):
 
 
 class Script(scripts.Script):
-    def __init__(self):
+    def __init__(self): # pylint: disable=useless-super-delegation
         super().__init__()
 
     # script title to show in ui
@@ -65,10 +66,10 @@ class Script(scripts.Script):
 
 
     # ui components
-    def ui(self, is_visible):
+    def ui(self, is_img2img): # pylint: disable=unused-argument
         with gr.Accordion('Steps animation', open = False, elem_id='steps-animation'):
             gr.HTML("""
-                <a href="https://github.com/vladmandic/generative-art/tree/main/extensions">
+                <a href="https://github.com/vladmandic/sd-extension-steps-animation/blob/main/README.md">
                 Creates animation sequence from denoised intermediate steps with video frame interpolation to achieve desired animation duration</a><br>""")
             with gr.Row():
                 is_enabled = gr.Checkbox(label = 'Script Enabled', value = False)
@@ -92,10 +93,10 @@ class Script(scripts.Script):
 
 
     # runs on each step for always-visible scripts
-    def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
+    def process(self, p, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path): # pylint: disable=arguments-differ, unused-argument
         if is_enabled:
             # save original callback
-            global orig_callback_state
+            global orig_callback_state # pylint: disable=global-statement
             if orig_callback_state == 'undefined':
                 if debug:
                     print(f'Steps animation patching sampler callback for: {p.sampler_name}')
@@ -124,7 +125,7 @@ class Script(scripts.Script):
                     ext = shared.opts.data['samples_format']
                     if (skip_steps == 0) or (current_step > skip_steps):
                         if debug:
-                           print(f'Steps animation saving interim image: step={current_step} batch={batch} iteration={p.iteration}: {fn}.{ext}')
+                            print(f'Steps animation saving interim image: step={current_step} batch={batch} iteration={p.iteration}: {fn}.{ext}')
                         try:
                             # latent = d['denoised'] if 'denoised' in d else d # shared.state.current_latent
                             latent = d if isinstance(d, torch.Tensor) else d['denoised'] # shared.state.current_latent
@@ -133,8 +134,9 @@ class Script(scripts.Script):
                             infotext = f"{infotext}, intermediate: {current_step:03d}"
                             inpath = os.path.join(p.outpath_samples, tmp_path)
                             save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
+                            temp_files.append(f'{fn}.{ext}')
                         except Exception as e:
-                           print('Steps animation error: save intermediate image', e)
+                            print('Steps animation error: save intermediate image', e)
                 return res
 
             # set custom callback
@@ -146,7 +148,7 @@ class Script(scripts.Script):
 
 
     # run at the end of sequence for always-visible scripts
-    def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):
+    def postprocess(self, p, processed, is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path):  # pylint: disable=arguments-differ
 
         def exec_cmd(cmd: string, debug: bool = False):
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ, check=False)
@@ -158,7 +160,7 @@ class Script(scripts.Script):
                     print('Steps animation output', result.stderr)
             return result.stdout if result.returncode == 0 else result.stderr
 
-        def check_codec(codec: string, debug: bool = False):
+        def check_codec(codec: string, debug: bool = False):  # pylint: disable=unused-argument
             stdout = exec_cmd('ffmpeg -hide_banner -encoders', debug=False)
             lines = stdout.splitlines()
             lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
@@ -168,7 +170,7 @@ class Script(scripts.Script):
             return codec in codecs
 
         # restore sampler callback
-        global orig_callback_state
+        global orig_callback_state # pylint: disable=global-statement
         if orig_callback_state != 'undefined':
             if debug:
                 print(f'Steps animation restoring sampler callback for: {p.sampler_name}')
@@ -252,23 +254,23 @@ class Script(scripts.Script):
             suffix = '.mov'
         else:
             suffix = '.mp4'
-        for iter in range(0, params['batchcount']):
+        for iteration in range(0, params['batchcount']):
             for batch in range(0, params['batchsize']):
-                index = iter * p.batch_size + batch
+                index = iteration * p.batch_size + batch
                 if debug:
-                    print(f'Steps animation processing batch={batch + 1}/{params["batchsize"]} iteration={iter + 1}/{params["batchcount"]}')
+                    print(f'Steps animation processing batch={batch + 1}/{params["batchsize"]} iteration={iteration + 1}/{params["batchcount"]}')
                 params['seed'] = v['all_seeds'][index]
-                params['prompt'] = v['all_prompts'][index]
+                params['prompt'] = safestring(v['all_prompts'][index])
                 params['short_name'] = str(params['seed']) + '-' + safestring(params['prompt'])[:name_length]
                 params['outfile'] = os.path.join(params['outpath'], params['short_name'] + suffix)
-                params['sequence'] = f'{iter:02d}{batch:02d}{(skip_steps + 1):03d}'
+                params['sequence'] = f'{iteration:02d}{batch:02d}{(skip_steps + 1):03d}'
                 params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | last {laststep} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
                 current_step = 0 # reset back to zero
                 if debug:
                     params['loglevel'] = 'info'
                     print('Steps animation params:', json.dumps(params, indent = 2))
                 if out_create:
-                    imgs = [f for f in os.listdir(params['inpath']) if f.startswith(f'{iter:02d}{batch:02d}') and params['short_name'] in f]
+                    imgs = [f for f in os.listdir(params['inpath']) if f.startswith(f'{iteration:02d}{batch:02d}') and params['short_name'] in f]
                     if params['framerate'] == 0:
                         print('Steps animation error: framerate is zero')
                         return
@@ -308,5 +310,6 @@ class Script(scripts.Script):
                     print(f'Steps animation removing {len(files)} files from temp folder: {root}')
                 for file in files:
                     f = os.path.join(root, file)
-                    if os.path.isfile(f):
+                    if os.path.isfile(f) and file in temp_files:
                         os.remove(f)
+                temp_files.clear()
