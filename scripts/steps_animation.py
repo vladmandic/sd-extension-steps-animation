@@ -169,6 +169,17 @@ class Script(scripts.Script):
             #    print('Steps animation supported codecs', codecs)
             return codec in codecs
 
+        def unique_filename(basename:str, ext:str) -> str:
+            filename = f'{basename}.{ext}'
+            if os.path.isfile(filename):
+                index = 1
+                while True:
+                    filename = f'{basename}-{str(index)}.{ext}'
+                    if not os.path.isfile(filename):
+                        break
+                    index += 1
+            return filename
+
         # restore sampler callback
         global orig_callback_state # pylint: disable=global-statement
         if orig_callback_state != 'undefined':
@@ -262,7 +273,7 @@ class Script(scripts.Script):
                 params['seed'] = v['all_seeds'][index]
                 params['prompt'] = safestring(v['all_prompts'][index])
                 params['short_name'] = str(params['seed']) + '-' + safestring(params['prompt'])[:name_length]
-                params['outfile'] = os.path.join(params['outpath'], params['short_name'] + suffix)
+                params['outfile'] = unique_filename(os.path.join(params['outpath'], params['short_name']), suffix)
                 params['sequence'] = f'{iteration:02d}{batch:02d}{(skip_steps + 1):03d}'
                 params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | last {laststep} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
                 current_step = 0 # reset back to zero
@@ -312,4 +323,7 @@ class Script(scripts.Script):
                     f = os.path.join(root, file)
                     if os.path.isfile(f) and file in temp_files:
                         os.remove(f)
+                        caption = f'{os.path.splitext(file)[0]}.txt'
+                        if os.path.isfile(caption):
+                            os.remove(caption)
                 temp_files.clear()
