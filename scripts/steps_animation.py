@@ -1,3 +1,4 @@
+# pylint: disable=import-error
 import json
 import os
 import shutil
@@ -281,12 +282,12 @@ class Script(scripts.Script):
                     params['loglevel'] = 'info'
                     print('Steps animation params:', json.dumps(params, indent = 2))
                 if out_create:
-                    imgs = [f for f in os.listdir(params['inpath']) if f.startswith(f'{iteration:02d}{batch:02d}') and params['short_name'] in f]
+                    imgs = [f for f in os.listdir(params['inpath']) if f.startswith(f'{iteration:02d}{batch:02d}') and params['short_name'][:16] in f]
                     if params['framerate'] == 0:
                         print('Steps animation error: framerate is zero')
                         return
                     if len(imgs) == 0:
-                        print('Steps animation no interim images were created')
+                        print('Steps animation no interim images were found')
                         return
                     if not os.path.isdir(params['outpath']):
                         print('Steps animation create folder:', params['outpath'])
