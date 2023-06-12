@@ -5,6 +5,7 @@ import shutil
 import string
 import pathlib
 import subprocess
+import logging
 
 import torch
 import gradio as gr
@@ -17,10 +18,6 @@ from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
 from modules.sd_samplers_compvis import VanillaStableDiffusionSampler
 
-try:
-    from rich import print # pylint: disable=redefined-builtin
-except:
-    pass
 
 # configurable section
 video_rate = 30
@@ -42,6 +39,8 @@ current_step = 0
 current_preview_mode = 'undefined'
 orig_callback_state = 'undefined'
 temp_files = []
+log = logging.getLogger('steps-animation')
+log.setLevel(logging.INFO)
 
 
 def safestring(text: str):
@@ -90,6 +89,7 @@ class Script(scripts.Script):
                 tmp_path = gr.Textbox(label = 'Intermediate files path', lines = 1, value = 'intermediate')
                 out_path = gr.Textbox(label = 'Output animation path', lines = 1, value = 'animation')
 
+        debug.change(fn=lambda: log.setLevel(logging.DEBUG) if debug.value else log.setLevel(logging.INFO))
         return [is_enabled, codec, interpolation, duration, skip_steps, last_frame_duration, debug, run_incomplete, tmp_delete, out_create, tmp_path, out_path]
 
 
@@ -99,8 +99,7 @@ class Script(scripts.Script):
             # save original callback
             global orig_callback_state # pylint: disable=global-statement
             if orig_callback_state == 'undefined':
-                if debug:
-                    print(f'Steps animation patching sampler callback for: {p.sampler_name}')
+                log.debug(f'Steps animation patching sampler callback for: {p.sampler_name}')
                 if p.sampler_name in ['DDIM', 'PLMS', 'UniPC']:
                     orig_callback_state = VanillaStableDiffusionSampler.update_step
                 else:
@@ -110,7 +109,7 @@ class Script(scripts.Script):
             if shared.opts.data['show_progress_type'] != 'Full':
                 global current_preview_mode # pylint: disable=global-statement
                 current_preview_mode = shared.opts.data['show_progress_type']
-                print(f"Steps animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
+                log.info(f"Steps animation setting preview type to Full (current {shared.opts.data['show_progress_type']})")
                 shared.opts.data['show_progress_type'] = 'Full'
 
             # define custom callback
@@ -125,8 +124,7 @@ class Script(scripts.Script):
                     fn = f"{p.iteration:02d}{batch:02d}{shared.state.sampling_step:03d}-{str(p.all_seeds[index])}-{safestring(p.all_prompts[index])[:name_length]}"
                     ext = shared.opts.data['samples_format']
                     if (skip_steps == 0) or (current_step > skip_steps):
-                        if debug:
-                            print(f'Steps animation saving interim image: step={current_step} batch={batch} iteration={p.iteration}: {fn}.{ext}')
+                        log.debug(f'Steps animation saving interim image: step={current_step} batch={batch} iteration={p.iteration}: {fn}.{ext}')
                         try:
                             # latent = d['denoised'] if 'denoised' in d else d # shared.state.current_latent
                             latent = d if isinstance(d, torch.Tensor) else d['denoised'] # shared.state.current_latent
@@ -137,7 +135,7 @@ class Script(scripts.Script):
                             save_image(image, inpath, '', extension = ext, short_filename = False, no_prompt = True, forced_filename = fn, info = infotext)
                             temp_files.append(f'{fn}.{ext}')
                         except Exception as e:
-                            print('Steps animation error: save intermediate image', e)
+                            log.error(f'Steps animation error: save intermediate image: {e}')
                 return res
 
             # set custom callback
@@ -153,12 +151,15 @@ class Script(scripts.Script):
 
         def exec_cmd(cmd: string, debug: bool = False):
             result = subprocess.run(cmd, capture_output=True, text=True, shell=True, env=os.environ, check=False)
-            if result.returncode != 0 or debug:
-                print('Steps animation', { 'command': cmd, 'returncode': result.returncode })
-                if len(result.stdout) > 0:
-                    print('Steps animation output', result.stdout)
-                if len(result.stderr) > 0:
-                    print('Steps animation output', result.stderr)
+            l = log.error if result.returncode != 0 else log.debug
+            orig_level = log.getEffectiveLevel()
+            log.setLevel(logging.DEBUG if debug else logging.INFO)
+            l(f'Steps animation: command={cmd} returncode={result.returncode}')
+            if len(result.stdout) > 0:
+                l(f'Steps animation output: {result.stdout}')
+            if len(result.stderr) > 0:
+                l(f'Steps animation output: {result.stderr}')
+            log.setLevel(orig_level)
             return result.stdout if result.returncode == 0 else result.stderr
 
         def check_codec(codec: string, debug: bool = False):  # pylint: disable=unused-argument
@@ -166,8 +167,6 @@ class Script(scripts.Script):
             lines = stdout.splitlines()
             lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
             codecs = [line.split()[1] for line in lines]
-            # if debug:
-            #    print('Steps animation supported codecs', codecs)
             return codec in codecs
 
         def unique_filename(basename:str, ext:str) -> str:
@@ -184,8 +183,7 @@ class Script(scripts.Script):
         # restore sampler callback
         global orig_callback_state # pylint: disable=global-statement
         if orig_callback_state != 'undefined':
-            if debug:
-                print(f'Steps animation restoring sampler callback for: {p.sampler_name}')
+            log.debug(f'Steps animation restoring sampler callback for: {p.sampler_name}')
             if p.sampler_name in ['DDIM', 'PLMS', 'UniPC']:
                 VanillaStableDiffusionSampler.update_step = orig_callback_state
             else:
@@ -202,11 +200,11 @@ class Script(scripts.Script):
         # callback was never initiated
         global current_step # pylint: disable=global-statement
         if current_step == 0:
-            print('Steps animation error: steps is zero, likely using unsupported sampler or interrupted')
+            log.error('Steps animation error: steps is zero, likely using unsupported sampler or interrupted')
             return
         # callback happened too early, it happens with large number of steps and some samplers or if interrupted
         if vars(processed)['steps'] < vars(processed)['steps']:
-            print('Steps animation warning: postprocess early call', { 'current': vars(processed)['steps'], 'target': vars(processed)['steps'] })
+            log.debug(f'Steps animation warning: postprocess early call: current={vars(processed)["steps"]} target={vars(processed)["steps"]}')
             if not run_incomplete:
                 return
         # create dictionary with all input and output parameters
@@ -269,8 +267,7 @@ class Script(scripts.Script):
         for iteration in range(0, params['batchcount']):
             for batch in range(0, params['batchsize']):
                 index = iteration * p.batch_size + batch
-                if debug:
-                    print(f'Steps animation processing batch={batch + 1}/{params["batchsize"]} iteration={iteration + 1}/{params["batchcount"]}')
+                log.debug(f'Steps animation processing batch={batch + 1}/{params["batchsize"]} iteration={iteration + 1}/{params["batchcount"]}')
                 params['seed'] = v['all_seeds'][index]
                 params['prompt'] = safestring(v['all_prompts'][index])
                 params['short_name'] = str(params['seed']) + '-' + safestring(params['prompt'])[:name_length]
@@ -280,51 +277,45 @@ class Script(scripts.Script):
                 current_step = 0 # reset back to zero
                 if debug:
                     params['loglevel'] = 'info'
-                    print('Steps animation params:', json.dumps(params, indent = 2))
+                    log.debug(f'Steps animation params: {json.dumps(params, indent = 2)}')
                 if out_create:
                     imgs = [f for f in os.listdir(params['inpath']) if f.startswith(f'{iteration:02d}{batch:02d}') and params['short_name'][:16] in f]
                     if params['framerate'] == 0:
-                        print('Steps animation error: framerate is zero')
+                        log.error('Steps animation error: framerate is zero')
                         return
                     if len(imgs) == 0:
-                        print('Steps animation no interim images were found')
+                        log.error('Steps animation no interim images were found')
                         return
                     if not os.path.isdir(params['outpath']):
-                        print('Steps animation create folder:', params['outpath'])
+                        log.info(f'Steps animation create folder: {params["outpath"]}')
                         pathlib.Path(params['outpath']).mkdir(parents=True, exist_ok=True)
                     if not os.path.isdir(params['inpath']) or not os.path.isdir(params['outpath']):
-                        print('Steps animation error: folder not found', params['inpath'], params['outpath'])
+                        log.error(f'Steps animation error: folder not found: {params["inpath"], params["outpath"]}')
                         return
 
                     if params['ffmpeg'] is None:
-                        print('Steps animation error: ffmpeg not found:')
+                        log.error('Steps animation error: ffmpeg not found:')
                     elif not check_codec(params['codec'], debug):
-                        print(f"Steps animation error: codec {params['codec']} not supported by ffmpeg")
+                        log.error(f"Steps animation error: codec {params['codec']} not supported by ffmpeg")
                     else:
-                        print(f'Steps animation creating movie sequence: {params["outfile"]} images={len(imgs)}')
-                        if debug:
-                            print('Steps animation processing batch', batch)
-                            print('Steps animation using images:', imgs)
+                        log.info(f'Steps animation creating movie sequence: {params["outfile"]} images={len(imgs)}')
+                        log.debug(f'Steps animation processing batch: {batch}')
+                        log.debug(f'Steps animation using images: {imgs}')
                         cmd = params['cli'].format(**params)
                         # actual ffmpeg call
                         exec_cmd(cmd, debug)
 
                     if debug:
                         if params['ffprobe'] is None:
-                            print('Steps animation verify error: ffprobe not found')
+                            log.error('Steps animation verify error: ffprobe not found')
                         else:
                             probe = f"ffprobe -hide_banner -print_format json -show_streams \"{params['outfile']}\""
                             exec_cmd(probe, debug)
 
         if tmp_delete:
-            for root, _dirs, files in os.walk(params['inpath']):
-                if debug:
-                    print(f'Steps animation removing {len(files)} files from temp folder: {root}')
-                for file in files:
-                    f = os.path.join(root, file)
-                    if os.path.isfile(f) and file in temp_files:
-                        os.remove(f)
-                        caption = f'{os.path.splitext(file)[0]}.txt'
-                        if os.path.isfile(caption):
-                            os.remove(caption)
-                temp_files.clear()
+            log.debug(f'Steps animation removing {len(temp_files)} files from temp folder: {params["inpath"]}')
+            for temp_file in temp_files:
+                for fn in pathlib.Path(params['inpath']).glob(os.path.basename(os.path.splitext(temp_file)[0]) + '*'):
+                    fn.unlink()
+
+        temp_files.clear()
