@@ -18,12 +18,13 @@ from modules.sd_samplers import sample_to_image
 from modules.sd_samplers_kdiffusion import KDiffusionSampler
 from modules.sd_samplers_compvis import VanillaStableDiffusionSampler
 
+from pkg_resources import resource_filename
 
 # configurable section
 video_rate = 30
 name_length = 96
 author = 'https://github.com/vladmandic'
-cli_template = "ffmpeg -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {sequence} -i \"{inpath}/%7d-{short_name}.{extension}\" -r {videorate} {preset} {vfilters} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
+cli_template = "{ffmpeg} -hide_banner -loglevel {loglevel} -hwaccel auto -y -framerate {framerate} -start_number {sequence} -i \"{inpath}/%7d-{short_name}.{extension}\" -r {videorate} {preset} {vfilters} {flags} -metadata title=\"{description}\" -metadata description=\"{info}\" -metadata author=\"stable-diffusion\" -metadata album_artist=\"{author}\" \"{outfile}\"" # note: <https://wiki.multimedia.cx/index.php/FFmpeg_Metadata>
 
 presets = {
     'x264': '-vcodec libx264 -preset medium -crf 23 -pix_fmt yuv420p',
@@ -50,6 +51,20 @@ def safestring(text: str):
     res = ', '.join(lines)
     return res[:1000]
 
+def find_ffmpeg_binary():
+    try:
+        import google.colab
+        return 'ffmpeg'
+    except:
+        pass
+    for package in ['imageio_ffmpeg', 'imageio-ffmpeg']:
+        try:
+            package_path = resource_filename(package, 'binaries')
+            files = [os.path.join(package_path, f) for f in os.listdir(package_path) if f.startswith("ffmpeg-")]
+            files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+            return files[0] if files else shutil.which('ffmpeg')
+        except:
+            return shutil.which('ffmpeg')
 
 class Script(scripts.Script):
     def __init__(self): # pylint: disable=useless-super-delegation
@@ -163,7 +178,9 @@ class Script(scripts.Script):
             return result.stdout if result.returncode == 0 else result.stderr
 
         def check_codec(codec: string, debug: bool = False):  # pylint: disable=unused-argument
-            stdout = exec_cmd('ffmpeg -hide_banner -encoders', debug=False)
+            ffmpeg = find_ffmpeg_binary()
+            cmd = f"{ffmpeg} -hide_banner -encoders"
+            stdout = exec_cmd(cmd, debug=False)
             lines = stdout.splitlines()
             lines = [line.strip() for line in lines if line.strip().startswith('V') and '=' not in line]
             codecs = [line.split()[1] for line in lines]
@@ -240,7 +257,7 @@ class Script(scripts.Script):
             'extension': shared.opts.data['samples_format'],
             'short_name': '', # will be set later
             'flags': '-movflags +faststart',
-            'ffmpeg': shutil.which('ffmpeg'), # detect if ffmpeg executable is present in path
+            'ffmpeg': find_ffmpeg_binary(), # detect if ffmpeg executable is present in path
             'ffprobe': shutil.which('ffprobe'), # detect if ffmpeg executable is present in path
         }
         # append conditionals to dictionary
