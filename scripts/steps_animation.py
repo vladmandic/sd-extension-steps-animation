@@ -270,7 +270,7 @@ class Script(scripts.Script):
                 log.debug(f'Steps animation processing batch={batch + 1}/{params["batchsize"]} iteration={iteration + 1}/{params["batchcount"]}')
                 params['seed'] = v['all_seeds'][index]
                 params['prompt'] = safestring(v['all_prompts'][index])
-                params['short_name'] = str(params['seed']) + '-' + safestring(params['prompt'])[:name_length]
+                params['short_name'] = str(params['seed']) + '-' + params['prompt'][:name_length]
                 params['outfile'] = unique_filename(os.path.join(params['outpath'], params['short_name']), suffix)
                 params['sequence'] = f'{iteration:02d}{batch:02d}{(skip_steps + 1):03d}'
                 params['description'] = '{prompt} | negative {negative} | seed {seed} | sampler {sampler} | cfgscale {cfgscale} | steps {steps} | last {laststep} | model {model} | embedding {embedding} | faces {faces} | timestamp {timestamp} | interpolation {interpolation}'.format(**params)
